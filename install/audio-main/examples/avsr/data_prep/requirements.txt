@@ -1,4 +1,0 @@
-tqdm
-scikit-image
-opencv-python
-ffmpeg-python
