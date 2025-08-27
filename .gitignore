@@ -1,1 +1,66 @@
+# === DONNÉES ===
 amicorpus/
+data/
+models/checkpoints/
+results/
+*.pth
+*.pkl
+*.pt
+
+# === CACHE PYTHON ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# === JUPYTER ===
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+
+# === ÉDITEURS ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.#*
+
+# === SYSTÈME ===
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# === LOGS ===
+*.log
+logs/
+*.tmp
+*.temp
+*.cache
+
+# === NVIDIA/CUDA ===
+*.o
+*.so
+*.dylib
+
+# === DOCUMENTATION ===
+docs/_build/
+
+# === TESTS ===
+.coverage
+.pytest_cache/
+.tox/
+.nox/
+htmlcov/
+
+# === WANDB ===
+wandb/
