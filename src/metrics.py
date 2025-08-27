@@ -1,287 +1,359 @@
-import os
-import torch
-import torchaudio
-import numpy as np
-import matplotlib.pyplot as plt
-from torchaudio.transforms import Spectrogram, AmplitudeToDB
-from IPython.display import Audio, display
-import logging
 import torch
 import numpy as np
-from torchaudio.transforms import Spectrogram, AmplitudeToDB
+from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
+from typing import Dict, Tuple, Optional
+import warnings
+warnings.filterwarnings("ignore")
 
 
+class DiarizationMetrics:
+    """Comprehensive metrics for speaker diarization evaluation."""
+    
+    def __init__(self, num_speakers: int = 4, frame_duration: float = 0.02, 
+                 collar: float = 0.25, threshold: float = 0.5):
+        self.num_speakers = num_speakers
+        self.frame_duration = frame_duration
+        self.collar = collar  # Collar in seconds
+        self.threshold = threshold
+        self.collar_frames = int(collar / frame_duration)
+    
+    def compute_der(self, vad_pred: torch.Tensor, vad_target: torch.Tensor,
+                   apply_collar: bool = True, skip_overlap: bool = False) -> float:
+        """
+        Compute Diarization Error Rate (DER).
+        
+        Args:
+            vad_pred: [batch, time, speakers] - predicted VAD probabilities
+            vad_target: [batch, time, speakers] - target VAD labels
+            apply_collar: Whether to apply collar around speech boundaries
+            skip_overlap: Whether to skip overlapped speech regions
+            
+        Returns:
+            DER as percentage
+        """
+        vad_pred_binary = (vad_pred > self.threshold).float()
+        batch_size = vad_pred.size(0)
+        
+        total_speech_time = 0
+        total_error_time = 0
+        
+        for b in range(batch_size):
+            pred_b = vad_pred_binary[b]  # [time, speakers]
+            target_b = vad_target[b]     # [time, speakers]
+            
+            # Apply collar if requested
+            if apply_collar and self.collar_frames > 0:
+                mask = self._get_collar_mask(target_b)
+                pred_b = pred_b[mask]
+                target_b = target_b[mask]
+            
+            # Skip overlapped regions if requested
+            if skip_overlap:
+                overlap_mask = target_b.sum(dim=1) <= 1
+                pred_b = pred_b[overlap_mask]
+                target_b = target_b[overlap_mask]
+            
+            if pred_b.numel() == 0:
+                continue
+            
+            # Compute error components
+            speech_frames = (target_b.sum(dim=1) > 0).sum().item()
+            
+            # False Alarm: prediction where no target speech
+            fa_frames = ((pred_b.sum(dim=1) > 0) & (target_b.sum(dim=1) == 0)).sum().item()
+            
+            # Miss: target speech where no prediction
+            miss_frames = ((pred_b.sum(dim=1) == 0) & (target_b.sum(dim=1) > 0)).sum().item()
+            
+            # Speaker Error: prediction and target both have speech but wrong assignment
+            both_active = (pred_b.sum(dim=1) > 0) & (target_b.sum(dim=1) > 0)
+            if both_active.any():
+                # Check speaker assignment accuracy
+                correct_assignment = (pred_b[both_active] * target_b[both_active]).sum(dim=1) > 0
+                speaker_error_frames = (~correct_assignment).sum().item()
+            else:
+                speaker_error_frames = 0
+            
+            total_speech_time += speech_frames
+            total_error_time += fa_frames + miss_frames + speaker_error_frames
+        
+        if total_speech_time == 0:
+            return 0.0
+        
+        der = 100 * total_error_time / total_speech_time
+        return der
+    
+    def _get_collar_mask(self, target: torch.Tensor) -> torch.Tensor:
+        """Get mask for collar application around speech boundaries."""
+        num_frames = target.size(0)
+        mask = torch.ones(num_frames, dtype=torch.bool)
+        
+        # Find speech activity
+        speech_activity = target.sum(dim=1) > 0
+        
+        # Find boundaries
+        if speech_activity.sum() > 0:
+            boundaries = torch.diff(speech_activity.float())
+            boundary_indices = torch.nonzero(boundaries, as_tuple=True)[0]
+            
+            # Apply collar around boundaries
+            for idx in boundary_indices:
+                start = max(0, idx - self.collar_frames)
+                end = min(num_frames, idx + self.collar_frames + 1)
+                mask[start:end] = False
+        
+        return mask
+    
+    def compute_frame_metrics(self, vad_pred: torch.Tensor, vad_target: torch.Tensor) -> Dict[str, float]:
+        """Compute frame-level classification metrics."""
+        vad_pred_binary = (vad_pred > self.threshold).float()
+        
+        # Flatten for sklearn metrics
+        pred_flat = vad_pred_binary.view(-1).cpu().numpy()
+        target_flat = vad_target.view(-1).cpu().numpy()
+        
+        precision = precision_score(target_flat, pred_flat, average='binary', zero_division=0)
+        recall = recall_score(target_flat, pred_flat, average='binary', zero_division=0)
+        f1 = f1_score(target_flat, pred_flat, average='binary', zero_division=0)
+        accuracy = accuracy_score(target_flat, pred_flat)
+        
+        return {
+            'frame_precision': precision,
+            'frame_recall': recall,
+            'frame_f1': f1,
+            'frame_accuracy': accuracy
+        }
+    
+    def compute_speaker_metrics(self, vad_pred: torch.Tensor, vad_target: torch.Tensor) -> Dict[str, float]:
+        """Compute per-speaker metrics."""
+        vad_pred_binary = (vad_pred > self.threshold).float()
+        
+        speaker_metrics = {}
+        
+        for spk in range(self.num_speakers):
+            pred_spk = vad_pred_binary[:, :, spk].view(-1).cpu().numpy()
+            target_spk = vad_target[:, :, spk].view(-1).cpu().numpy()
+            
+            if target_spk.sum() > 0:  # Only compute if speaker has activity
+                precision = precision_score(target_spk, pred_spk, zero_division=0)
+                recall = recall_score(target_spk, pred_spk, zero_division=0)
+                f1 = f1_score(target_spk, pred_spk, zero_division=0)
+                
+                speaker_metrics[f'speaker_{spk}_precision'] = precision
+                speaker_metrics[f'speaker_{spk}_recall'] = recall
+                speaker_metrics[f'speaker_{spk}_f1'] = f1
+        
+        return speaker_metrics
+    
+    def compute_osd_metrics(self, osd_pred: torch.Tensor, osd_target: torch.Tensor) -> Dict[str, float]:
+        """Compute Overlapped Speech Detection metrics."""
+        osd_pred_binary = (osd_pred > self.threshold).float()
+        
+        pred_flat = osd_pred_binary.view(-1).cpu().numpy()
+        target_flat = osd_target.view(-1).cpu().numpy()
+        
+        precision = precision_score(target_flat, pred_flat, zero_division=0)
+        recall = recall_score(target_flat, pred_flat, zero_division=0)
+        f1 = f1_score(target_flat, pred_flat, zero_division=0)
+        accuracy = accuracy_score(target_flat, pred_flat)
+        
+        return {
+            'osd_precision': precision,
+            'osd_recall': recall,
+            'osd_f1': f1,
+            'osd_accuracy': accuracy
+        }
+    
+    def compute_jaccard_index(self, vad_pred: torch.Tensor, vad_target: torch.Tensor) -> float:
+        """Compute Jaccard Index (IoU) for overall speech detection."""
+        vad_pred_binary = (vad_pred > self.threshold).float()
+        
+        # Any speaker active
+        pred_activity = (vad_pred_binary.sum(dim=2) > 0).float()
+        target_activity = (vad_target.sum(dim=2) > 0).float()
+        
+        intersection = (pred_activity * target_activity).sum()
+        union = ((pred_activity + target_activity) > 0).float().sum()
+        
+        if union == 0:
+            return 1.0
+        
+        jaccard = intersection / union
+        return jaccard.item()
+    
+    def compute_coverage(self, vad_pred: torch.Tensor, vad_target: torch.Tensor) -> Tuple[float, float]:
+        """Compute speech coverage metrics."""
+        vad_pred_binary = (vad_pred > self.threshold).float()
+        
+        # Total speech time in target and prediction
+        target_speech_time = (vad_target.sum(dim=2) > 0).float().sum()
+        pred_speech_time = (vad_pred_binary.sum(dim=2) > 0).float().sum()
+        
+        if target_speech_time == 0:
+            return 0.0, 0.0
+        
+        coverage = pred_speech_time / target_speech_time
+        over_coverage = max(0, coverage.item() - 1.0)
+        
+        return coverage.item(), over_coverage
+    
+    def compute_purity_coverage(self, vad_pred: torch.Tensor, vad_target: torch.Tensor) -> Tuple[float, float]:
+        """Compute purity and coverage for speaker diarization."""
+        vad_pred_binary = (vad_pred > self.threshold).float()
+        batch_size, time_steps, num_speakers = vad_pred.shape
+        
+        total_purity = 0
+        total_coverage = 0
+        total_speakers = 0
+        
+        for b in range(batch_size):
+            for spk in range(num_speakers):
+                target_spk = vad_target[b, :, spk]
+                
+                if target_spk.sum() == 0:
+                    continue
+                
+                total_speakers += 1
+                
+                # Find best matching predicted speaker
+                best_overlap = 0
+                best_spk_pred = None
+                
+                for pred_spk in range(num_speakers):
+                    pred_activity = vad_pred_binary[b, :, pred_spk]
+                    overlap = (target_spk * pred_activity).sum()
+                    
+                    if overlap > best_overlap:
+                        best_overlap = overlap
+                        best_spk_pred = pred_spk
+                
+                if best_spk_pred is not None:
+                    pred_activity = vad_pred_binary[b, :, best_spk_pred]
+                    
+                    # Coverage: how much of target is covered by prediction
+                    coverage = best_overlap / target_spk.sum()
+                    
+                    # Purity: how much of prediction corresponds to this target
+                    if pred_activity.sum() > 0:
+                        purity = best_overlap / pred_activity.sum()
+                    else:
+                        purity = 0
+                    
+                    total_coverage += coverage
+                    total_purity += purity
+        
+        if total_speakers == 0:
+            return 0.0, 0.0
+        
+        avg_purity = total_purity / total_speakers
+        avg_coverage = total_coverage / total_speakers
+        
+        return avg_purity.item(), avg_coverage.item()
+    
+    def compute_metrics(self, vad_pred: torch.Tensor, osd_pred: torch.Tensor,
+                       vad_target: torch.Tensor, osd_target: torch.Tensor) -> Dict[str, float]:
+        """Compute all metrics."""
+        metrics = {}
+        
+        # DER (main metric)
+        metrics['der'] = self.compute_der(vad_pred, vad_target)
+        
+        # Frame-level metrics
+        frame_metrics = self.compute_frame_metrics(vad_pred, vad_target)
+        metrics.update(frame_metrics)
+        
+        # Speaker-specific metrics
+        speaker_metrics = self.compute_speaker_metrics(vad_pred, vad_target)
+        metrics.update(speaker_metrics)
+        
+        # OSD metrics
+        osd_metrics = self.compute_osd_metrics(osd_pred, osd_target)
+        metrics.update(osd_metrics)
+        
+        # Additional metrics
+        metrics['jaccard_index'] = self.compute_jaccard_index(vad_pred, vad_target)
+        coverage, over_coverage = self.compute_coverage(vad_pred, vad_target)
+        metrics['coverage'] = coverage
+        metrics['over_coverage'] = over_coverage
+        
+        purity, coverage_pc = self.compute_purity_coverage(vad_pred, vad_target)
+        metrics['purity'] = purity
+        metrics['coverage_pc'] = coverage_pc
+        
+        # F1 score (balanced measure)
+        if 'frame_precision' in metrics and 'frame_recall' in metrics:
+            p, r = metrics['frame_precision'], metrics['frame_recall']
+            metrics['f1_score'] = 2 * p * r / (p + r + 1e-8)
+        
+        return metrics
 
-def load_audio(file_path):
-    if not os.path.isfile(file_path):
-        raise FileNotFoundError(f"Le fichier {file_path} n'existe pas.")
-    waveform, sample_rate = torchaudio.load(file_path)
-    print(f"Loaded {file_path} with sample rate {sample_rate} and waveform shape {waveform.shape}")
-    return waveform, sample_rate
 
-def get_waveform(file_directory, segment_duration=4):
+def compute_segment_level_metrics(segments_pred: list, segments_target: list, 
+                                total_duration: float, collar: float = 0.25) -> Dict[str, float]:
     """
-    Récupère les waveforms des différents microphones et les divise en segments de 4 secondes.
+    Compute segment-level diarization metrics from segment lists.
     
-    Parameters:
-    file_directory (str): Le répertoire contenant les fichiers audio.
-    segment_duration (int): La durée de chaque segment en secondes.
-    
+    Args:
+        segments_pred: List of (start, end, speaker_id) tuples for predictions
+        segments_target: List of (start, end, speaker_id) tuples for targets
+        total_duration: Total audio duration in seconds
+        collar: Collar in seconds around segment boundaries
+        
     Returns:
-    list of list of np.array: Liste des segments de waveforms pour chaque segment de temps.
-    int: Le taux d'échantillonnage des fichiers audio.
+        Dictionary of metrics
     """
-    waveforms = []
-    sample_rate = None
-
-    for mic_num in range(1, 9):
-        sample_wav = os.path.join(file_directory, f"ES2002c.Array1-0{mic_num}.wav")
-        print(f"Processing {sample_wav}")
-
-        # Charger le fichier audio
-        waveform, sample_rate = load_audio(sample_wav)
-        waveforms.append(waveform)
-
-    # Diviser les waveforms en segments de 4 secondes
-    segment_length = segment_duration * sample_rate
-    num_segments = len(waveforms[0][0]) // segment_length
-
-    # Initialiser une liste de listes pour stocker les segments pour chaque temps et microphone
-    all_segments = [[None for _ in range(8)] for _ in range(num_segments)]
-
-    for mic_idx, waveform in enumerate(waveforms):
-        for seg_idx in range(num_segments):
-            segment = waveform[:, seg_idx*segment_length:(seg_idx+1)*segment_length]
-            all_segments[seg_idx][mic_idx] = segment
-
-    # Vérifier et ignorer les segments partiels
-    if len(waveforms[0][0]) % segment_length != 0:
-        all_segments.pop()
-
-    return all_segments, sample_rate
-
-def calculate_distance(mic_position1, mic_position2):
-    """
-    Calcule la distance entre deux microphones.
-
-    :param mic_position1: tuple (x1, y1) représentant la position du premier microphone
-    :param mic_position2: tuple (x2, y2) représentant la position du deuxième microphone
-    :return: distance entre les deux microphones
-    """
-    x1, y1 = mic_position1
-    x2, y2 = mic_position2
-    distance = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
-    return distance
-
-def calculate_relative_angle(look_direction, mic_position1, mic_position2):
-    """
-    Calcule l'angle relatif entre la direction de regard et la paire de microphones.
-
-    :param look_direction: direction de regard θ en radians
-    :param mic_position1: tuple (x1, y1) représentant la position du premier microphone
-    :param mic_position2: tuple (x2, y2) représentant la position du deuxième microphone
-    :return: angle relatif entre la direction de regard et la paire de microphones
-    """
-    x1, y1 = mic_position1
-    x2, y2 = mic_position2
-    mid_point_x = (x1 + x2) / 2
-    mid_point_y = (y1 + y2) / 2
-    angle_mic_pair = np.arctan2(mid_point_y, mid_point_x)
-    relative_angle = look_direction - angle_mic_pair
-    return relative_angle
-
-def compute_af(theta, frequencies, delta_m, theta_m, c):
-    """
-    Calcule le vecteur de phase v_m_theta pour une paire de microphones donnée.
-
-    :param theta: direction de regard θ en radians
-    :param frequencies: les fréquences des spectrogrammes
-    :param delta_m: la distance entre la paire de microphones
-    :param theta_m: l'angle relatif entre la direction de regard et la paire de microphones
-    :param c: la vitesse du son en m/s
-    :return: vecteur de phase v_m_theta
-    """
-    v_m_theta = (2 * np.pi * frequencies * delta_m * np.cos(theta_m - theta) / c).unsqueeze(1)
-    print(f"Computed AF for θ={theta} with shape {v_m_theta.shape}")
-    return v_m_theta
-
-
-
-
-def compute_af(theta, frequencies, delta_m, theta_m, c):
-    """
-    Calculate angle feature (AF) for given parameters.
-    """
-    v_m_theta = 2 * np.pi * frequencies * delta_m * np.cos(theta_m - theta) / c
-    return v_m_theta
-
-def compute_metrics(waveforms, sample_rate,n_fft=2048,hop_length=1024,theta_values =  [0,  np.pi/2, np.pi,  3*np.pi/2], mic_pairs=[(0, 4), (1, 5), (2, 6), (3, 7)]): 
-    c = 343  # Speed of sound in m/s    
-    print("Starting computation of metrics...")
-
-    print("Calculating spectrograms...")
-    transform = Spectrogram(n_fft, hop_length, power=None)
-    specs = [transform(waveform) for waveform in waveforms]
-    for idx, spec in enumerate(specs):
-        print(f"Spectrogram shape for microphone {idx + 1}: {spec.shape}")
-
-    print("Calculating LPS...")
-    amplitude_to_db = AmplitudeToDB()
-    lps = [amplitude_to_db(spec.abs()) for spec in specs]
-    for idx, lp in enumerate(lps):
-        print(f"LPS shape for microphone {idx + 1}: {lp.shape}")
-
-    print("Calculating phases...")
-    phases = [torch.angle(spec) for spec in specs]
-    for idx, phase in enumerate(phases):
-        print(f"Phase shape for microphone {idx + 1}: {phase.shape}")
-
-    # Calculate IPD for provided pairs of microphones
-    ipd_pairs = {}
-    print("Calculating IPD for provided pairs of microphones...")
-    for (i, j) in mic_pairs:
-        print(f"Calculating IPD for Microphones {i + 1} and {j + 1}")
-        ipd_pairs[(i, j)] = torch.angle(specs[i]) - torch.angle(specs[j])
-        print(f"IPD shape for microphones {i + 1} and {j + 1}: {ipd_pairs[(i, j)].shape}")
-
-    # Define microphone positions (assuming a circular array)
-    mic_positions = [(0.1 * np.cos(i * np.pi / 4), 0.1 * np.sin(i * np.pi / 4)) for i in range(8)]
+    # Convert segments to frame-level labels
+    frame_rate = 100  # 10ms frames
+    total_frames = int(total_duration * frame_rate)
     
-    # Calculate relative distances and angles for provided pairs of microphones
-    mic_pairs_info = {}
-    for (i, j) in mic_pairs:
-        delta_m = np.sqrt((mic_positions[i][0] - mic_positions[j][0])**2 + (mic_positions[i][1] - mic_positions[j][1])**2)
-        theta_m = np.arctan2(mic_positions[j][1] - mic_positions[i][1], mic_positions[j][0] - mic_positions[i][0])
-        mic_pairs_info[(i, j)] = (delta_m, theta_m)
+    def segments_to_frames(segments, num_frames):
+        frames = np.zeros((num_frames, max(4, max([s[2] for s in segments] + [0]) + 1)))
+        for start, end, speaker in segments:
+            start_frame = int(start * frame_rate)
+            end_frame = min(int(end * frame_rate), num_frames)
+            if end_frame > start_frame:
+                frames[start_frame:end_frame, speaker] = 1
+        return frames
     
-    frequencies = torch.linspace(0, sample_rate // 2, specs[0].size(-2))
-    af_dict = {}
-    theta_values = [0, 0.5 * np.pi, np.pi, 1.5 * np.pi]  # Example theta values
+    pred_frames = segments_to_frames(segments_pred, total_frames)
+    target_frames = segments_to_frames(segments_target, total_frames)
     
-    print("Calculating AF for provided pairs of microphones...")
-    for theta in theta_values:
-        af_sum = torch.zeros((frequencies.size(0), specs[0].size(-1))).clone()
-        for (i, j), ipd in ipd_pairs.items():
-            print(f"Calculating AF contribution for Microphones {i + 1} and {j + 1} with θ={theta} radians")
-            delta_m, theta_m = mic_pairs_info[(i, j)]
-            v_m_theta = compute_af(theta, frequencies, delta_m, theta_m, c).reshape(-1, 1)
-            af_sum += torch.cos(v_m_theta - ipd.squeeze(0))
-        af_dict[theta] = af_sum
-        print(f"AF shape with θ={theta} radians: {af_dict[theta].shape}")
-
-    print("Finished computation of metrics.")
-    return specs, lps, phases, ipd_pairs, af_dict
-
-
-def plot_spectrograms(lps, sample_rate, duration=10):
-    subsample_length = duration * sample_rate // 1024  # Assuming hop_length is 1024
-    times = np.linspace(0, duration, subsample_length)
-    frequencies = torch.linspace(0, sample_rate // 2, lps[0].size(-2))
-
-    plt.figure(figsize=(12, 12))
-    for i, lp in enumerate(lps):
-        plt.subplot(len(lps), 1, i + 1)
-        plt.pcolormesh(times, frequencies.numpy(), lp[0][:, :subsample_length].numpy(), shading='gouraud')
-        plt.title(f'Spectrogramme d\'Amplitude - Microphone {i + 1}')
-        plt.ylabel('Fréquence [Hz]')
-        plt.colorbar(label='Amplitude [dB]')
-    plt.tight_layout()
-    plt.show()
-
-def plot_phases(phases, sample_rate, duration=10):
-    subsample_length = duration * sample_rate // 1024  # Assuming hop_length is 1024
-    times = np.linspace(0, duration, subsample_length)
-    frequencies = torch.linspace(0, sample_rate // 2, phases[0].size(-2))
-
-    plt.figure(figsize=(12, 12))
-    for idx, phase in enumerate(phases):
-        plt.subplot(len(phases), 1, idx + 1)
-        plt.pcolormesh(times, frequencies.numpy(), phase[0, :, :subsample_length].numpy(), shading='gouraud')
-        plt.title(f'Phase - Microphone {idx + 1}')
-        plt.ylabel('Fréquence [Hz]')
-        plt.colorbar(label='Phase [radians]')
-    plt.tight_layout()
-    plt.show()
-
-def plot_ipd_pairs(ipd_pairs, sample_rate, duration=10):
-    subsample_length = duration * sample_rate // 1024  # Assuming hop_length is 1024
-    times = np.linspace(0, duration, subsample_length)
-    frequencies = torch.linspace(0, sample_rate // 2, list(ipd_pairs.values())[0].size(-2))
-
-    # Identify the first and last keys in the dictionary
-    first_key = list(ipd_pairs.keys())[0]
-    last_key = list(ipd_pairs.keys())[-1]
-
-    plt.figure(figsize=(12, 6))
-    for idx, (i, j) in enumerate([first_key, last_key]):
-        ipd = ipd_pairs[(i, j)]
-        plt.subplot(2, 1, idx + 1)
-        plt.pcolormesh(times, frequencies.numpy(), ipd[0][:, :subsample_length].numpy(), shading='gouraud')
-        plt.title(f'IPD - Microphones {i + 1} et {j + 1}')
-        plt.ylabel('Fréquence [Hz]')
-        plt.colorbar(label='Phase [radians]')
-    plt.tight_layout()
-    plt.show()    
-
-def plot_af_pairs(af_dict, sample_rate,theta_values ,duration=10):
-    subsample_length = duration * sample_rate // 1024  # Assuming hop_length is 1024
-    times = np.linspace(0, duration, subsample_length)
-    frequencies = torch.linspace(0, sample_rate // 2, list(af_dict.values())[0].size(0))
-    plt.figure(figsize=(12, 24))  # Adjust the figure size for more subplots
-    for idx, theta in enumerate(theta_values):
-        af = af_dict[theta]
-        plt.subplot(len(theta_values), 1, idx + 1)
-        plt.pcolormesh(times, frequencies.numpy(), af[:, :subsample_length].numpy(), shading='gouraud', vmin=0, vmax=25)
-        plt.title(f'AFθ - θ={theta} rad')
-        plt.ylabel('Fréquence [Hz]')
-        plt.colorbar(label='Amplitude')
-    plt.tight_layout()
-    plt.show()
-
-
-
-def plot_energy_distribution(af_dict, n_seconds, ax):
-    total_duration = 2424  # Durée totale du spectrogramme en secondes
-    logging.info(f'Total duration: {total_duration} seconds')
-
-    # Initialisation d'un dictionnaire pour stocker les énergies
-    energy_dict = {}
-
-    # Calculer l'énergie pour chaque direction θ en sommant les normes au carré des valeurs d'AF sur toutes les fréquences
-    for theta, af in af_dict.items():
-        energy = (af ** 2).sum(axis=0)  # Somme de la norme au carré sur les fréquences
-        energy_dict[theta] = energy
-        logging.debug(f'Energy calculated for theta={theta}: {energy}')
-        logging.debug(f'Energy shape for theta={theta}: {energy.shape}')
-
-    # Normalisation des énergies pour obtenir une distribution entre 0 et 1
-    total_energy = sum(energy_dict.values())
-    logging.info(f'Total energy: {total_energy}')
+    # Convert to tensors
+    pred_tensor = torch.tensor(pred_frames[:, :4], dtype=torch.float32).unsqueeze(0)
+    target_tensor = torch.tensor(target_frames[:, :4], dtype=torch.float32).unsqueeze(0)
     
-    normalized_energy_dict = {theta: energy / total_energy for theta, energy in energy_dict.items()}
-
-    # Déterminer le nombre total d'échantillons dans `af`
-    af_length = af_dict[list(af_dict.keys())[0]].shape[1]
-    logging.info(f'AF length (number of samples): {af_length}')
+    # Compute metrics
+    metrics_computer = DiarizationMetrics(frame_duration=0.01, collar=collar)
+    metrics = {}
+    metrics['der'] = metrics_computer.compute_der(pred_tensor, target_tensor, apply_collar=True)
     
-    # Calculer le nombre d'échantillons correspondant à n_seconds
-    n_samples = int((n_seconds / total_duration) * af_length)
-    logging.info(f'Number of samples for {n_seconds} seconds: {n_samples}')
+    frame_metrics = metrics_computer.compute_frame_metrics(pred_tensor, target_tensor)
+    metrics.update(frame_metrics)
+    
+    return metrics
 
-    # Tracer la distribution d'énergie
-    for theta, energy in normalized_energy_dict.items():
-        times = np.linspace(0, total_duration, len(energy))
-        logging.debug(f'Times for theta={theta}: {times}')
-        
-        # Filtrer les énergies pour ne prendre que celles avant n_seconds
-        energy_filtered = energy[:n_samples]
-        times_filtered = times[:n_samples]
-        logging.debug(f'Filtered energy for theta={theta}: {energy_filtered}')
-        
-        ax.plot(times_filtered, energy_filtered, label=f'θ={theta} rad')
 
-    ax.set_title('Distribution d\'énergie normalisée en fonction du temps pour différentes directions θ')
-    ax.set_xlabel('Temps (secondes)')
-    ax.set_ylabel('Énergie normalisée')
-    ax.legend()
-    ax.grid(True)
+if __name__ == "__main__":
+    # Test metrics
+    batch_size = 4
+    time_steps = 1000
+    num_speakers = 4
+    
+    # Generate dummy data
+    vad_pred = torch.sigmoid(torch.randn(batch_size, time_steps, num_speakers))
+    osd_pred = torch.sigmoid(torch.randn(batch_size, time_steps))
+    vad_target = torch.randint(0, 2, (batch_size, time_steps, num_speakers)).float()
+    osd_target = torch.randint(0, 2, (batch_size, time_steps)).float()
+    
+    # Initialize metrics
+    metrics_computer = DiarizationMetrics(num_speakers=num_speakers)
+    
+    # Compute metrics
+    metrics = metrics_computer.compute_metrics(vad_pred, osd_pred, vad_target, osd_target)
+    
+    print("Computed metrics:")
+    for key, value in metrics.items():
+        if isinstance(value, (int, float)):
+            print(f"{key}: {value:.4f}")
+    
+    print(f"\nMain DER: {metrics['der']:.2f}%")
