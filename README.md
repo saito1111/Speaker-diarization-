@@ -1,9 +1,9 @@
-# 🎙️ Enhanced Multi-Channel Speaker Diarization System
+# 🎙️ Simple Single-Channel Speaker Diarization System
 
 ## Table des Matières
 1. [Vue d'ensemble](#vue-densemble)
 2. [Architecture du Modèle](#architecture-du-modèle)
-3. [Détail des Couches](#détail-des-couches)
+3. [Dataset VoxConverse](#dataset-voxconverse)
 4. [Extraction des Caractéristiques](#extraction-des-caractéristiques)
 5. [Fonctions de Perte](#fonctions-de-perte)
 6. [Installation et Usage](#installation-et-usage)
@@ -14,48 +14,89 @@
 
 ## Vue d'ensemble
 
-Ce projet implémente un système de **diarization de locuteurs multi-canal** basé sur des réseaux de neurones convolutionnels temporels (TCN). Le système détermine "qui parle quand" dans des enregistrements audio multi-canaux, avec des capacités avancées de détection de parole superposée et d'identification des locuteurs.
+Ce projet implémente un système de **diarization de locuteurs mono-canal** basé sur des réseaux de neurones convolutionnels temporels (TCN) simplifié. Le système détermine "qui parle quand" dans des enregistrements audio single-channel, en utilisant directement le signal audio avec des caractéristiques spectrales simples.
 
 ### 🎯 Objectifs du Système
 - **VAD (Voice Activity Detection)** : Détecter quand chaque locuteur parle
-- **OSD (Overlapped Speech Detection)** : Identifier les moments de parole simultanée
+- **OSD (Overlapped Speech Detection)** : Identifier les moments de parole simultanée  
 - **Classification des locuteurs** : Identifier et classifier les différents locuteurs
-- **Extraction d'embeddings** : Créer des représentations vectorielles des locuteurs
+- **Modèle simple et efficace** : Travail direct sur les formes d'onde avec caractéristiques spectrales basiques
 
 ### 📊 Données d'Entrée
-- **Audio multi-canal** : 8 microphones en configuration circulaire
-- **Caractéristiques extraites** : 771 dimensions par frame temporelle
-  - LPS (Log Power Spectrum) : 257 × 8 canaux = 2056 dims → moyennées à 257
-  - IPD (Inter-channel Phase Difference) : 4 paires de micros = 257 × 4 = 1028 dims
-  - AF (Angle Features) : 4 directions × 257 = 1028 dims
-  - **Total** : 257 + 257×4 = 771 dimensions
+- **Audio mono-canal** : Signal audio simple 16kHz
+- **Dataset** : VoxConverse (conversations naturelles)
+- **Caractéristiques extraites** : 80 dimensions de spectrogramme mel par frame temporelle
+  - Spectrogramme Mel : 80 filtres mel sur 257 bins de fréquence
+  - **Total** : 80 dimensions (beaucoup plus simple que les 771 originales)
 
 ---
 
 ## Architecture du Modèle
 
-L'architecture suit une approche **encoder-decoder multi-tâches** avec classification de locuteurs intégrée :
+L'architecture suit une approche **TCN simplifiée** pour diarization mono-canal :
 
 ```
-Audio Multi-canal (8 canaux)
+Audio Mono-canal (16kHz)
          ↓
-Extraction de Caractéristiques → [Batch, 771, Time]
+Extraction de Spectrogramme Mel → [Batch, 80, Time]
          ↓
 Normalisation d'entrée (BatchNorm1d)
          ↓
 TCN Multi-échelle (5 blocs temporels)
          ↓
-Auto-attention (optionnel)
-         ↓
 Goulot d'étranglement (256 dims)
          ↓
-    ┌─────────┬─────────┬──────────────┐
-    ↓         ↓         ↓              ↓
-Décodeur    Décodeur   Extracteur    Classificateur
-  VAD        OSD      Embeddings     Locuteurs
-    ↓         ↓         ↓              ↓
-[B,T,4]   [B,T,1]   [B,256,1]    [B,4]
+    ┌─────────┬─────────┐
+    ↓         ↓         
+Décodeur    Décodeur   
+  VAD        OSD      
+    ↓         ↓         
+[B,T,4]   [B,T,1]   
 ```
+
+**Note importante** : Cette version simplifiée retire :
+- L'auto-attention (trop complexe pour débuter)
+- L'extraction d'embeddings (pas nécessaire pour commencer)
+- Les caractéristiques multi-canaux complexes
+
+---
+
+## Dataset VoxConverse
+
+### 📁 Structure du Dataset
+Le système utilise le dataset **VoxConverse** disponible sur Hugging Face :
+
+```python
+from datasets import load_dataset
+ds = load_dataset("diarizers-community/voxconverse")
+```
+
+### 🎯 Caractéristiques VoxConverse
+- **Format** : Audio mono-canal 16kHz
+- **Contenu** : Conversations naturelles extraites de vidéos
+- **Splits** : 
+  - `dev` : 216 conversations (entraînement/validation)
+  - `test` : 232 conversations (évaluation)
+- **Annotations** : Timestamps précis + identifiants de locuteurs
+- **Durées** : De 30 secondes à 12+ minutes par conversation
+- **Nombre de locuteurs** : Variable (2 à 17 locuteurs par conversation)
+
+### 🔍 Structure des Données
+Chaque élément contient :
+```python
+{
+    'audio': {'array': waveform, 'sampling_rate': 16000},
+    'timestamps_start': [34.72, 178.12, ...],  # Début des segments
+    'timestamps_end': [42.36, 178.76, ...],    # Fin des segments  
+    'speakers': ['spk00', 'spk01', 'spk02', ...] # Labels des locuteurs
+}
+```
+
+### 📊 Statistiques du Dataset
+- **Durée totale** : ~37 heures d'audio
+- **Durée moyenne** : ~4.9 minutes par conversation
+- **Couverture de parole** : ~96% (peu de silences)
+- **Superposition** : Présente (conversations naturelles)
 
 ---
 
@@ -63,14 +104,14 @@ Décodeur    Décodeur   Extracteur    Classificateur
 
 ### 🔄 1. Normalisation d'Entrée
 ```python
-self.input_norm = nn.BatchNorm1d(input_dim=771)
+self.input_norm = nn.BatchNorm1d(input_dim=80)
 ```
 
 **Transformation** : `x = (x - μ) / σ`
-- **Entrée** : `[Batch, 771, Time]`
-- **Sortie** : `[Batch, 771, Time]` (normalisé)
-- **Pourquoi** : Stabilise l'entraînement en normalisant les caractéristiques audio
-- **Paramètres** : 771×2 = 1,542 (moyenne et variance par canal)
+- **Entrée** : `[Batch, 80, Time]`
+- **Sortie** : `[Batch, 80, Time]` (normalisé)
+- **Pourquoi** : Stabilise l'entraînement en normalisant les caractéristiques mel
+- **Paramètres** : 80×2 = 160 (moyenne et variance par canal mel)
 
 ### 🧱 2. Bloc Temporel (TemporalBlock)
 
@@ -901,96 +942,57 @@ similarity = similarity_head(combined)  # [B, 1] ∈ [0,1]
 
 ## Extraction des Caractéristiques
 
-### 📡 Configuration Multi-canal
+### 🎵 Configuration Audio Simple
 
-Le système utilise un **array circulaire de 8 microphones** avec rayon de 10cm :
+Le système utilise un **signal audio mono-canal** avec extraction de spectrogramme mel :
 
 ```python
-# Positions des microphones (coordonnées polaires)
-mic_positions = [(0.1 * cos(i*π/4), 0.1 * sin(i*π/4)) for i in range(8)]
-# Soit: [(0.1,0), (0.07,0.07), (0,0.1), (-0.07,0.07), (-0.1,0), ...]
+import torchaudio
+import torch
 
-# Paires de microphones pour IPD
-mic_pairs = [(0,4), (1,5), (2,6), (3,7)]  # Paires opposées
+def extract_mel_features(waveform, sample_rate=16000):
+    """Extraction simple de caractéristiques mel"""
+    mel_transform = torchaudio.transforms.MelSpectrogram(
+        sample_rate=sample_rate,
+        n_fft=512,           # Fenêtre de 32ms à 16kHz
+        hop_length=256,      # Hop de 16ms (50% overlap)
+        n_mels=80,           # 80 filtres mel
+        f_min=20,            # Fréquence minimale
+        f_max=8000           # Fréquence maximale
+    )
+    return mel_transform(waveform)
 ```
 
-### 🎵 1. LPS (Log Power Spectrum)
+### 🎯 1. Spectrogramme Mel
 
 **Calcul** :
 ```python
-# Pour chaque canal
-spectrogram = STFT(waveform, n_fft=512, hop_length=256)  # [257, T]
-power_spectrum = |spectrogram|²  # Magnitude au carré
-lps = 20 * log10(power_spectrum + ε)  # Échelle logarithmique
-# Résultat: [257, T] par canal
+# Audio mono-canal
+waveform: [1, samples]  # Signal audio simple
+
+# Transformation mel
+mel_spec = MelSpectrogram(waveform)  # [80, T]
+log_mel = torch.log(mel_spec + 1e-8)  # Échelle logarithmique
 ```
 
-**Agrégation** : Moyenne sur les 8 canaux → `[257, T]`
+**Pourquoi le spectrogramme mel ?** :
+- **Perception auditive** : Imite la perception humaine des fréquences
+- **Compacité** : 80 dimensions au lieu de 257 bins FFT
+- **Robustesse** : Filtres triangulaires lissent le bruit
+- **Simplicité** : Une seule transformation, pas de calculs multi-canaux
 
-**Pourquoi le LPS ?** :
-- **Perception auditive** : L'oreille humaine perçoit en échelle logarithmique
-- **Robustesse** : Moins sensible aux variations d'amplitude
-- **Plage dynamique** : Compresse les grandes variations d'énergie
-
-### 📐 2. IPD (Inter-channel Phase Difference)
-
-**Calcul pour une paire de micros (i,j)** :
-```python
-spec_i = STFT(waveform_i)  # [257, T] (complexe)
-spec_j = STFT(waveform_j)  # [257, T] (complexe)
-
-phase_i = angle(spec_i)  # Phase du canal i
-phase_j = angle(spec_j)  # Phase du canal j
-
-ipd = phase_i - phase_j  # Différence de phase [257, T]
-```
-
-**Dimensions finales** : 4 paires × 257 fréquences = `[1028, T]`
-
-**Interprétation physique** :
-```
-Si un son arrive de la direction θ:
-- IPD ≈ 2πf * d * cos(θ - θ_pair) / c
-où:
-- f: fréquence
-- d: distance entre micros  
-- θ_pair: orientation de la paire
-- c: vitesse du son (343 m/s)
-```
-
-### 🎯 3. AF (Angle Features)
-
-**Calcul pour une direction θ** :
-```python
-def compute_AF(ipd_measurements, target_direction_θ):
-    af_sum = 0
-    for pair_idx, ipd_pair in enumerate(ipd_measurements):
-        # Calculer la différence de phase théorique pour cette direction
-        theoretical_ipd = 2π * f * d_pair * cos(θ - θ_pair) / c
-        
-        # Mesurer la corrélation avec l'IPD observé
-        correlation = cos(theoretical_ipd - ipd_pair)
-        af_sum += correlation
-    
-    return af_sum  # [257, T]
-```
-
-**Directions testées** : [0°, 90°, 180°, 270°] → 4 × 257 = `[1028, T]`
-
-**Intuition** :
-- Si un son vient vraiment de θ, alors AF_θ sera élevé
-- Les autres directions auront des AF plus faibles
-- C'est un "détecteur de direction" par fréquence
-
-### 📊 Caractéristiques Finales
+### 📊 Caractéristiques Finales Simplifiées
 
 ```
-LPS:  [257, T]   - Énergie spectrale moyenne
-IPD:  [1028, T]  - 4 paires × 257 fréquences  
-AF:   [1028, T]  - 4 directions × 257 fréquences
--------------------------------------------------
-Total: [771, T]  - Réduit de 2313 à 771 par agrégation intelligente
+Mel Features: [80, T]   - 80 filtres mel sur signal mono
+Total:        [80, T]   - 10x plus simple que les 771 dimensions originales
 ```
+
+**Avantages de cette approche** :
+- ✅ **Simple à implémenter** : Une seule transformation  
+- ✅ **Rapide à traiter** : 80 dimensions vs 771
+- ✅ **Moins de mémoire** : Modèle beaucoup plus léger
+- ✅ **Bon point de départ** : Permet de valider l'approche avant complexification
 
 ---
 
