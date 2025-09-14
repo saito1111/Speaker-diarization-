@@ -62,13 +62,13 @@
     "use_fused_adam": true
   },
   "performance": {
-    "total_training_time": 462.8448748588562,
-    "avg_step_time": 0.008231976836256653,
-    "steps_per_second": 121.47750411488433,
-    "best_val_loss": 0.05253420141099137,
+    "total_training_time": 452.5699391365051,
+    "avg_step_time": 0.00813504865781857,
+    "steps_per_second": 122.92489474404104,
+    "best_val_loss": 0.049999997081855936,
     "final_memory_stats": {
       "allocated_gb": 0.04554414749145508,
-      "reserved_gb": 0.1015625,
+      "reserved_gb": 0.099609375,
       "max_allocated_gb": 0.18079710006713867,
       "total_gb": 23.98779296875,
       "utilization": 0.18986385096281067
