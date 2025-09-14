@@ -39,7 +39,7 @@
     "label_smoothing": 0.05
   },
   "training": {
-    "epochs": 5,
+    "epochs": 30,
     "warmup_epochs": 3,
     "base_batch_size": 16,
     "max_batch_size": 64,
@@ -48,6 +48,8 @@
     "num_workers": 4,
     "pin_memory": true,
     "persistent_workers": true,
+    "prefetch_factor": 2,
+    "worker_init_fn": true,
     "actual_batch_size": 16
   },
   "use_amp": false,

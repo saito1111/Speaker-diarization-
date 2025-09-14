@@ -22,7 +22,8 @@ class VoxConverseDataset(Dataset):
                  sample_rate=16000,
                  n_mels=80,
                  max_speakers=8,
-                 min_speaker_duration=0.5):
+                 min_speaker_duration=0.5,
+                 pin_memory=True):
         """
         Args:
             split: 'dev' or 'test'
@@ -32,6 +33,7 @@ class VoxConverseDataset(Dataset):
             n_mels: Number of mel features
             max_speakers: Maximum number of speakers to handle
             min_speaker_duration: Minimum duration for a speaker to be included
+            pin_memory: Legacy parameter, now handled by DataLoader pin_memory setting
         """
         self.split = split
         self.segment_duration = segment_duration
@@ -40,6 +42,7 @@ class VoxConverseDataset(Dataset):
         self.n_mels = n_mels
         self.max_speakers = max_speakers
         self.min_speaker_duration = min_speaker_duration
+        self.pin_memory = pin_memory
         
         # Load VoxConverse dataset
         print(f"Loading VoxConverse {split} split...")
@@ -241,6 +244,10 @@ def create_voxconverse_dataloaders(batch_size=16,
                                    num_workers=4,
                                    segment_duration=4.0,
                                    validation_split=0.1,
+                                   pin_memory=True,
+                                   persistent_workers=False,
+                                   prefetch_factor=2,
+                                   worker_init_fn=None,
                                    **dataset_kwargs):
     """
     Create train and validation dataloaders from VoxConverse.
@@ -250,14 +257,37 @@ def create_voxconverse_dataloaders(batch_size=16,
         num_workers: Number of worker processes
         segment_duration: Duration of each training segment
         validation_split: Fraction of dev set to use for validation
+        pin_memory: If True, tensors will be allocated in pinned memory for faster GPU transfer
+        persistent_workers: If True, keep worker processes alive between epochs
+        prefetch_factor: Number of batches to prefetch per worker
+        worker_init_fn: Function to initialize worker processes
         **dataset_kwargs: Additional arguments for VoxConverseDataset
     """
     
-    # Create dataset
+    # Separate DataLoader-specific arguments from Dataset arguments
+    dataloader_args = {
+        'batch_size': batch_size,
+        'num_workers': num_workers,
+        'pin_memory': pin_memory,
+        'collate_fn': collate_fn
+    }
+    
+    # Add DataLoader-specific arguments if using multiple workers
+    if num_workers > 0:
+        dataloader_args['persistent_workers'] = persistent_workers
+        dataloader_args['prefetch_factor'] = prefetch_factor
+        if worker_init_fn is not None:
+            dataloader_args['worker_init_fn'] = worker_init_fn
+    
+    # Create dataset (only pass dataset-specific arguments)
+    dataset_args = {k: v for k, v in dataset_kwargs.items() 
+                    if k not in ['persistent_workers', 'prefetch_factor', 'worker_init_fn']}
+    
     full_dataset = VoxConverseDataset(
         split='dev',  # Use dev split for both train/val
         segment_duration=segment_duration,
-        **dataset_kwargs
+        pin_memory=pin_memory,
+        **dataset_args
     )
     
     # Split into train/validation
@@ -269,23 +299,17 @@ def create_voxconverse_dataloaders(batch_size=16,
         full_dataset, [train_size, val_size]
     )
     
-    # Create dataloaders
+    # Create dataloaders with optimized settings
     train_loader = DataLoader(
         train_dataset,
-        batch_size=batch_size,
         shuffle=True,
-        num_workers=num_workers,
-        collate_fn=collate_fn,
-        pin_memory=True
+        **dataloader_args
     )
     
     val_loader = DataLoader(
         val_dataset,
-        batch_size=batch_size,
         shuffle=False,
-        num_workers=num_workers,
-        collate_fn=collate_fn,
-        pin_memory=True
+        **dataloader_args
     )
     
     print(f"📊 Dataset split:")
@@ -296,21 +320,44 @@ def create_voxconverse_dataloaders(batch_size=16,
     return train_loader, val_loader
 
 
-def create_test_dataloader(batch_size=16, num_workers=4, **dataset_kwargs):
+def create_test_dataloader(batch_size=16, 
+                          num_workers=4, 
+                          pin_memory=True,
+                          persistent_workers=False,
+                          prefetch_factor=2,
+                          worker_init_fn=None,
+                          **dataset_kwargs):
     """Create test dataloader from VoxConverse test split."""
+    
+    # Separate DataLoader-specific arguments from Dataset arguments
+    dataloader_args = {
+        'batch_size': batch_size,
+        'num_workers': num_workers,
+        'pin_memory': pin_memory,
+        'collate_fn': collate_fn,
+        'shuffle': False
+    }
+    
+    # Add DataLoader-specific arguments if using multiple workers
+    if num_workers > 0:
+        dataloader_args['persistent_workers'] = persistent_workers
+        dataloader_args['prefetch_factor'] = prefetch_factor
+        if worker_init_fn is not None:
+            dataloader_args['worker_init_fn'] = worker_init_fn
+    
+    # Create dataset (only pass dataset-specific arguments)
+    dataset_args = {k: v for k, v in dataset_kwargs.items() 
+                    if k not in ['persistent_workers', 'prefetch_factor', 'worker_init_fn']}
     
     test_dataset = VoxConverseDataset(
         split='test',
-        **dataset_kwargs
+        pin_memory=pin_memory,
+        **dataset_args
     )
     
     test_loader = DataLoader(
         test_dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=num_workers,
-        collate_fn=collate_fn,
-        pin_memory=True
+        **dataloader_args
     )
     
     print(f"📊 Test dataset: {len(test_dataset)} segments")
@@ -342,7 +389,9 @@ if __name__ == "__main__":
     train_loader, val_loader = create_voxconverse_dataloaders(
         batch_size=4,
         num_workers=0,  # For testing
-        segment_duration=4.0
+        segment_duration=4.0,
+        persistent_workers=False,  # Not needed with num_workers=0
+        pin_memory=False  # For testing
     )
     
     # Test a batch
