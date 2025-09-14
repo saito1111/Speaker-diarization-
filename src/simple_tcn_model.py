@@ -226,7 +226,6 @@ def create_simple_model(config):
     )
 
 
-if __name__ == "__main__":
     # Test the simplified model
     batch_size = 4
     seq_len = 1000
