@@ -1,0 +1,351 @@
+{
+  "timestamp": "2025-09-15T20:53:04.559525",
+  "config": {
+    "model": {
+      "input_dim": 80,
+      "hidden_channels": [
+        128,
+        256,
+        256,
+        512,
+        512,
+        512
+      ],
+      "kernel_size": 3,
+      "num_speakers": 8,
+      "dropout": 0.1,
+      "use_long_range": true
+    },
+    "curriculum": {
+      "schedule": [
+        [
+          0,
+          2.0,
+          0.5
+        ],
+        [
+          5,
+          4.0,
+          0.4
+        ],
+        [
+          10,
+          8.0,
+          0.3
+        ],
+        [
+          15,
+          16.0,
+          0.2
+        ],
+        [
+          20,
+          30.0,
+          0.1
+        ]
+      ]
+    },
+    "training": {
+      "total_epochs": 25,
+      "base_batch_size": 16,
+      "base_lr": 0.001,
+      "weight_decay": 0.0001,
+      "gradient_clip": 1.0
+    },
+    "optimization": {
+      "use_amp": true,
+      "use_compile": false,
+      "memory_efficient": true
+    }
+  },
+  "model_info": {
+    "architecture": "LongRangeDiarizationModel",
+    "num_parameters": 10291689,
+    "model_size_mb": 39.25967788696289
+  },
+  "training_history": [
+    {
+      "epoch": 0,
+      "stage": 0,
+      "segment_duration": 2.0,
+      "hop_ratio": 0.5,
+      "batch_size": 16,
+      "learning_rate": 0.0005,
+      "train_loss": 0.19271390352930343
+    },
+    {
+      "epoch": 1,
+      "stage": 0,
+      "segment_duration": 2.0,
+      "hop_ratio": 0.5,
+      "batch_size": 16,
+      "learning_rate": 0.00075,
+      "train_loss": 0.16891971869128092
+    },
+    {
+      "epoch": 2,
+      "stage": 0,
+      "segment_duration": 2.0,
+      "hop_ratio": 0.5,
+      "batch_size": 16,
+      "learning_rate": 0.001,
+      "train_loss": 0.16209908894130162
+    },
+    {
+      "epoch": 3,
+      "stage": 0,
+      "segment_duration": 2.0,
+      "hop_ratio": 0.5,
+      "batch_size": 16,
+      "learning_rate": 0.001,
+      "train_loss": 0.16077219162668502
+    },
+    {
+      "epoch": 4,
+      "stage": 0,
+      "segment_duration": 2.0,
+      "hop_ratio": 0.5,
+      "batch_size": 16,
+      "learning_rate": 0.001,
+      "train_loss": 0.1602122506925038
+    },
+    {
+      "epoch": 5,
+      "stage": 1,
+      "segment_duration": 4.0,
+      "hop_ratio": 0.4,
+      "batch_size": 16,
+      "learning_rate": 0.00045454545454545455,
+      "train_loss": 0.16014882922172546
+    },
+    {
+      "epoch": 6,
+      "stage": 1,
+      "segment_duration": 4.0,
+      "hop_ratio": 0.4,
+      "batch_size": 16,
+      "learning_rate": 0.0006818181818181819,
+      "train_loss": 0.1596608736685344
+    },
+    {
+      "epoch": 7,
+      "stage": 1,
+      "segment_duration": 4.0,
+      "hop_ratio": 0.4,
+      "batch_size": 16,
+      "learning_rate": 0.0009090909090909091,
+      "train_loss": 0.15938341404710496
+    },
+    {
+      "epoch": 8,
+      "stage": 1,
+      "segment_duration": 4.0,
+      "hop_ratio": 0.4,
+      "batch_size": 16,
+      "learning_rate": 0.0009090909090909091,
+      "train_loss": 0.15937480117593492
+    },
+    {
+      "epoch": 9,
+      "stage": 1,
+      "segment_duration": 4.0,
+      "hop_ratio": 0.4,
+      "batch_size": 16,
+      "learning_rate": 0.0009090909090909091,
+      "train_loss": 0.15939903897898539
+    },
+    {
+      "epoch": 10,
+      "stage": 2,
+      "segment_duration": 8.0,
+      "hop_ratio": 0.3,
+      "batch_size": 8,
+      "learning_rate": 0.0004166666666666667,
+      "train_loss": 0.15930102536311516
+    },
+    {
+      "epoch": 11,
+      "stage": 2,
+      "segment_duration": 8.0,
+      "hop_ratio": 0.3,
+      "batch_size": 8,
+      "learning_rate": 0.000625,
+      "train_loss": 0.15926258495220771
+    },
+    {
+      "epoch": 12,
+      "stage": 2,
+      "segment_duration": 8.0,
+      "hop_ratio": 0.3,
+      "batch_size": 8,
+      "learning_rate": 0.0008333333333333334,
+      "train_loss": 0.15916942059993744
+    },
+    {
+      "epoch": 13,
+      "stage": 2,
+      "segment_duration": 8.0,
+      "hop_ratio": 0.3,
+      "batch_size": 8,
+      "learning_rate": 0.0008333333333333334,
+      "train_loss": 0.15889851175821745
+    },
+    {
+      "epoch": 14,
+      "stage": 2,
+      "segment_duration": 8.0,
+      "hop_ratio": 0.3,
+      "batch_size": 8,
+      "learning_rate": 0.0008333333333333334,
+      "train_loss": 0.1588511409667822
+    },
+    {
+      "epoch": 15,
+      "stage": 3,
+      "segment_duration": 16.0,
+      "hop_ratio": 0.2,
+      "batch_size": 4,
+      "learning_rate": 0.0003846153846153846,
+      "train_loss": 0.15888778269290924
+    },
+    {
+      "epoch": 16,
+      "stage": 3,
+      "segment_duration": 16.0,
+      "hop_ratio": 0.2,
+      "batch_size": 4,
+      "learning_rate": 0.0005769230769230769,
+      "train_loss": 0.15872026443481446
+    },
+    {
+      "epoch": 17,
+      "stage": 3,
+      "segment_duration": 16.0,
+      "hop_ratio": 0.2,
+      "batch_size": 4,
+      "learning_rate": 0.0007692307692307692,
+      "train_loss": 0.15854965567588805
+    },
+    {
+      "epoch": 18,
+      "stage": 3,
+      "segment_duration": 16.0,
+      "hop_ratio": 0.2,
+      "batch_size": 4,
+      "learning_rate": 0.0007692307692307692,
+      "train_loss": 0.1586889612674713
+    },
+    {
+      "epoch": 19,
+      "stage": 3,
+      "segment_duration": 16.0,
+      "hop_ratio": 0.2,
+      "batch_size": 4,
+      "learning_rate": 0.0007692307692307692,
+      "train_loss": 0.1586466598510742
+    },
+    {
+      "epoch": 20,
+      "stage": 4,
+      "segment_duration": 30.0,
+      "hop_ratio": 0.1,
+      "batch_size": 4,
+      "learning_rate": 0.00035714285714285714,
+      "train_loss": 0.1585683333873749
+    },
+    {
+      "epoch": 21,
+      "stage": 4,
+      "segment_duration": 30.0,
+      "hop_ratio": 0.1,
+      "batch_size": 4,
+      "learning_rate": 0.0005357142857142857,
+      "train_loss": 0.1584775286912918
+    },
+    {
+      "epoch": 22,
+      "stage": 4,
+      "segment_duration": 30.0,
+      "hop_ratio": 0.1,
+      "batch_size": 4,
+      "learning_rate": 0.0007142857142857143,
+      "train_loss": 0.15850263237953185
+    },
+    {
+      "epoch": 23,
+      "stage": 4,
+      "segment_duration": 30.0,
+      "hop_ratio": 0.1,
+      "batch_size": 4,
+      "learning_rate": 0.0007142857142857143,
+      "train_loss": 0.1583851969242096
+    },
+    {
+      "epoch": 24,
+      "stage": 4,
+      "segment_duration": 30.0,
+      "hop_ratio": 0.1,
+      "batch_size": 4,
+      "learning_rate": 0.0007142857142857143,
+      "train_loss": 0.15839487314224243
+    },
+    {
+      "epoch": 25,
+      "stage": 4,
+      "segment_duration": 30.0,
+      "hop_ratio": 0.1,
+      "batch_size": 4,
+      "learning_rate": 0.0007142857142857143,
+      "train_loss": 0.15836457908153534
+    },
+    {
+      "epoch": 26,
+      "stage": 4,
+      "segment_duration": 30.0,
+      "hop_ratio": 0.1,
+      "batch_size": 4,
+      "learning_rate": 0.0007142857142857143,
+      "train_loss": 0.15836780965328218
+    },
+    {
+      "epoch": 27,
+      "stage": 4,
+      "segment_duration": 30.0,
+      "hop_ratio": 0.1,
+      "batch_size": 4,
+      "learning_rate": 0.0007142857142857143,
+      "train_loss": 0.15837399303913116
+    },
+    {
+      "epoch": 28,
+      "stage": 4,
+      "segment_duration": 30.0,
+      "hop_ratio": 0.1,
+      "batch_size": 4,
+      "learning_rate": 0.0007142857142857143,
+      "train_loss": 0.15834630131721497
+    },
+    {
+      "epoch": 29,
+      "stage": 4,
+      "segment_duration": 30.0,
+      "hop_ratio": 0.1,
+      "batch_size": 4,
+      "learning_rate": 0.0007142857142857143,
+      "train_loss": 0.15842080175876616
+    }
+  ],
+  "performance_summary": {
+    "total_epochs": 30,
+    "curriculum_stages": 5,
+    "final_loss": 0.15842080175876616,
+    "loss_improvement": 0.034293101770537265
+  },
+  "gpu_stats": {
+    "allocated_gb": 0.242685952,
+    "reserved_gb": 3.42884352,
+    "max_allocated_gb": 2.76903936,
+    "total_gb": 25.756696576,
+    "utilization": 0.009422246804201357
+  }
+}
