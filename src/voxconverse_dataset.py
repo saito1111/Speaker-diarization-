@@ -240,12 +240,12 @@ def collate_fn(batch):
     }
 
 
-def create_voxconverse_dataloaders(batch_size=16, 
+def create_voxconverse_dataloaders(batch_size=32, 
                                    num_workers=4,
                                    segment_duration=4.0,
                                    validation_split=0.1,
                                    pin_memory=True,
-                                   persistent_workers=False,
+                                   persistent_workers=True,
                                    prefetch_factor=2,
                                    worker_init_fn=None,
                                    **dataset_kwargs):
@@ -318,49 +318,4 @@ def create_voxconverse_dataloaders(batch_size=16,
     print(f"  Total: {total_size} segments")
     
     return train_loader, val_loader
-
-
-def create_test_dataloader(batch_size=16, 
-                          num_workers=4, 
-                          pin_memory=True,
-                          persistent_workers=False,
-                          prefetch_factor=2,
-                          worker_init_fn=None,
-                          **dataset_kwargs):
-    """Create test dataloader from VoxConverse test split."""
-    
-    # Separate DataLoader-specific arguments from Dataset arguments
-    dataloader_args = {
-        'batch_size': batch_size,
-        'num_workers': num_workers,
-        'pin_memory': pin_memory,
-        'collate_fn': collate_fn,
-        'shuffle': False
-    }
-    
-    # Add DataLoader-specific arguments if using multiple workers
-    if num_workers > 0:
-        dataloader_args['persistent_workers'] = persistent_workers
-        dataloader_args['prefetch_factor'] = prefetch_factor
-        if worker_init_fn is not None:
-            dataloader_args['worker_init_fn'] = worker_init_fn
-    
-    # Create dataset (only pass dataset-specific arguments)
-    dataset_args = {k: v for k, v in dataset_kwargs.items() 
-                    if k not in ['persistent_workers', 'prefetch_factor', 'worker_init_fn']}
-    
-    test_dataset = VoxConverseDataset(
-        split='test',
-        pin_memory=pin_memory,
-        **dataset_args
-    )
-    
-    test_loader = DataLoader(
-        test_dataset,
-        **dataloader_args
-    )
-    
-    print(f"📊 Test dataset: {len(test_dataset)} segments")
-    
-    return test_loader
 

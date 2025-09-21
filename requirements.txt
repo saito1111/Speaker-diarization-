@@ -1,0 +1,187 @@
+# ==========================================
+# Speaker Diarization Project Requirements  
+# Installation complète en one-shot
+# Optimisé pour CUDA 13.0 + RTX 4090 + Python 3.12
+# ==========================================
+
+# PyTorch ecosystem avec support CUDA 12.9 (compatible CUDA 13.0)
+# Ces versions doivent être installées avec l'index CUDA spécifique
+torch==2.8.0+cu129
+torchaudio==2.8.0+cu129
+torchvision==0.23.0+cu129
+triton==3.4.0
+
+# NVIDIA CUDA Libraries (installées automatiquement avec PyTorch)
+nvidia-cublas-cu12==12.9.1.4
+nvidia-cuda-cupti-cu12==12.9.79
+nvidia-cuda-nvrtc-cu12==12.9.86
+nvidia-cuda-runtime-cu12==12.9.79
+nvidia-cudnn-cu12==9.10.2.21
+nvidia-cufft-cu12==11.4.1.4
+nvidia-cufile-cu12==1.14.1.1
+nvidia-curand-cu12==10.3.10.19
+nvidia-cusolver-cu12==11.7.5.82
+nvidia-cusparse-cu12==12.5.10.65
+nvidia-cusparselt-cu12==0.7.1
+nvidia-nccl-cu12==2.27.3
+nvidia-nvjitlink-cu12==12.9.86
+nvidia-nvtx-cu12==12.9.79
+
+# Core Data Science Libraries (versions testées Python 3.12)
+numpy==2.1.2
+scipy==1.16.2  
+scikit-learn==1.7.2
+pandas==2.3.2
+
+# Audio Processing (versions testées Python 3.12)  
+librosa==0.10.2
+soundfile==0.12.1
+audioread==3.0.1
+soxr==1.0.0
+cffi==2.0.0
+pycparser==2.23
+
+# Deep Learning Datasets & Utils (versions testées Python 3.12)
+datasets==3.0.0  # HuggingFace datasets (VoxConverse)
+transformers==4.45.0  # HuggingFace transformers  
+tokenizers==0.20.3
+huggingface-hub==0.35.0
+hf-xet==1.1.10
+safetensors==0.6.2
+
+# Visualization & Monitoring (versions testées Python 3.12)
+matplotlib==3.9.0
+seaborn==0.13.2  
+contourpy==1.3.3
+cycler==0.12.1
+fonttools==4.60.0
+kiwisolver==1.4.9
+pyparsing==3.2.4
+pillow==11.0.0
+
+# ==========================================
+# Numerical Computing & Scientific Libraries  
+# ==========================================
+numba==0.62.0  # JIT compilation optimisé
+llvmlite==0.45.0  # Backend LLVM pour numba
+joblib==1.5.2  # Parallel computing
+threadpoolctl==3.6.0  # Threading control
+mpmath==1.3.0  # Math arbitrary precision
+sympy==1.13.3  # Symbolic mathematics
+
+# ==========================================
+# Data Processing & Storage
+# ==========================================
+pyarrow==21.0.0  # Apache Arrow (datasets HuggingFace)
+dill==0.3.8  # Pickling extended
+multiprocess==0.70.16  # Multiprocessing amélioré
+xxhash==3.5.0  # Hashing rapide
+msgpack==1.1.1  # Serialization binaire
+
+# ==========================================
+# Network & HTTP
+# ==========================================
+requests==2.32.5  # HTTP requests
+urllib3==2.5.0  # HTTP client
+certifi==2025.8.3  # Certificats SSL/TLS
+charset-normalizer==3.4.3  # Character encoding
+idna==3.10  # Internationalized Domain Names
+aiohttp==3.12.15  # HTTP client/server asynchrone
+aiohappyeyeballs==2.6.1  # IPv6/IPv4 dual-stack
+aiosignal==1.4.0  # Async signals
+attrs==25.3.0  # Classes sans boilerplate
+frozenlist==1.7.0  # Immutable lists
+multidict==6.6.4  # Multi-key dictionaries
+propcache==0.3.2  # Property caching
+yarl==1.20.1  # URL parsing
+
+# ==========================================  
+# System & File Operations
+# ==========================================
+filelock==3.13.1  # File locking
+fsspec==2024.6.1  # Filesystem spec
+networkx==3.3  # Graph processing
+packaging==25.0  # Package version handling
+platformdirs==4.4.0  # Platform directories
+psutil==7.1.0  # System monitoring  
+lazy_loader==0.4  # Lazy module loading
+
+# ==========================================
+# Configuration & Serialization
+# ==========================================
+PyYAML==6.0.2  # YAML parsing
+regex==2025.9.18  # Regular expressions
+typing_extensions==4.12.2  # Type hints extended
+
+# ==========================================
+# Date & Time Processing  
+# ==========================================
+python-dateutil==2.9.0.post0  # Date utilities
+pytz==2025.2  # Timezone handling
+tzdata==2025.2  # Timezone database
+
+# ==========================================
+# Progress & UI
+# ==========================================
+tqdm==4.67.1  # Progress bars
+pooch==1.8.2  # Data downloading/caching
+
+# ==========================================
+# Template & Markup
+# ==========================================
+Jinja2==3.1.4  # Template engine
+MarkupSafe==2.1.5  # Safe string handling
+
+# ==========================================
+# Jupyter & IPython Environment (pré-installé)
+# ==========================================
+ipykernel==6.30.1
+ipython==9.5.0  
+ipython_pygments_lexers==1.1.1
+jupyter_client==8.6.3
+jupyter_core==5.8.1
+matplotlib-inline==0.1.7
+nest-asyncio==1.6.0
+parso==0.8.5
+pexpect==4.9.0
+prompt_toolkit==3.0.52
+ptyprocess==0.7.0
+pure_eval==0.2.3
+Pygments==2.19.2
+pyzmq==27.1.0
+six==1.17.0
+stack-data==0.6.3
+tornado==6.5.2
+traitlets==5.14.3
+wcwidth==0.2.13
+
+# ==========================================
+# Development Tools (pré-installé)
+# ==========================================
+asttokens==3.0.0
+comm==0.2.3
+debugpy==1.8.17
+decorator==5.2.1
+executing==2.2.1
+jedi==0.19.2
+setuptools==80.9.0
+wheel==0.45.1
+
+# ==========================================
+# Installation Notes:
+# - PyTorch packages requièrent l'index CUDA : --index-url https://download.pytorch.org/whl/cu129
+# - Versions testées avec Python 3.12.3 et CUDA 13.0
+# - Environnement RTX 4090 24GB
+# ==========================================
+# fastapi>=0.100.0  # Web API
+# uvicorn>=0.23.0  # ASGI server
+# pydantic>=2.0.0  # API validation
+# onnx>=1.14.0  # Model export
+# onnxruntime-gpu>=1.15.0  # ONNX runtime with GPU
+
+# ==========================================
+# Development Dependencies (Optional)
+# ==========================================
+# pre-commit>=3.3.0  # Git hooks
+# mypy>=1.5.0  # Static type checking
+# isort>=5.12.0  # Import sorting
