@@ -31,10 +31,11 @@ import pandas as pd
 import numpy as np
 from collections import defaultdict
 
-# Import local modules
-sys.path.append(str(Path(__file__).parent / 'src'))
-from voxconverse_dataset import create_voxconverse_dataloaders, create_test_dataloader
+# Add src directory to path for local imports
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
+# Import local modules
+from voxconverse_dataset import create_voxconverse_dataloaders
 
 @dataclass
 class TestConfig:

@@ -15,7 +15,7 @@ def analyze_benchmark_results():
     """Analyser les résultats du benchmark et trouver la configuration optimale."""
     
     # Charger les données
-    df = pd.read_csv('output/voxconverse_benchmark_results.csv')
+    df = pd.read_csv('../output/voxconverse_benchmark_results.csv')
     
     print("🎯 ANALYSE DES RÉSULTATS DE BENCHMARK VOXCONVERSE")
     print("=" * 60)
