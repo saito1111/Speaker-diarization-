@@ -95,17 +95,16 @@ class VoxConverseDataset(Dataset):
                         start_time, end_time, timestamps_start, timestamps_end, speakers
                     )
                     
-                    # Only keep segments with some speech activity
-                    if segment_labels['has_speech']:
-                        segments.append({
-                            'audio': audio_segment,
-                            'vad_labels': segment_labels['vad'],
-                            'osd_labels': segment_labels['osd'],
-                            'speaker_ids': segment_labels['speaker_ids'],
-                            'conv_idx': conv_idx,
-                            'start_time': start_time,
-                            'end_time': end_time
-                        })
+                    # Keep ALL segments (removed has_speech filter)
+                    segments.append({
+                        'audio': audio_segment,
+                        'vad_labels': segment_labels['vad'],
+                        'osd_labels': segment_labels['osd'],
+                        'speaker_ids': segment_labels['speaker_ids'],
+                        'conv_idx': conv_idx,
+                        'start_time': start_time,
+                        'end_time': end_time
+                    })
                     
                     start_time += self.hop_duration
             

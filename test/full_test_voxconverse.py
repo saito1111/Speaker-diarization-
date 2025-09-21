@@ -481,7 +481,7 @@ class PerformanceBenchmark:
             rows.append(row)
         
         df = pd.DataFrame(rows)
-        df.to_csv('voxconverse_benchmark_results.csv', index=False)
+        df.to_csv('../output/voxconverse_benchmark_results.csv', index=False)
 
 
 def main():
