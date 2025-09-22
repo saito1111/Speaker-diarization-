@@ -224,7 +224,7 @@ class VoxConverseDataset(Dataset):
             
             # 4. Générer VCN - détection des changements de speaker
             current_speakers = set()
-            for frame_idx in range(num_frames):
+            for frame_idx in range(num_frames): 
                 # Trouver les speakers actifs dans cette frame
                 frame_speakers = set()
                 for speaker_idx in range(num_speakers):
@@ -246,10 +246,30 @@ class VoxConverseDataset(Dataset):
                         has_voice_change = True
                     current_speakers = frame_speakers.copy()
             
-            # Debug: compter les frames pour chaque métrique
-            vad_frames = int(np.sum(vad_labels > 0))
-            osd_frames = int(np.sum(osd_labels > 0))
-            vcn_frames = int(np.sum(vcn_labels > 0))
+            # Compter les frames pour chaque métrique avec protection robuste
+            try:
+                vad_frames = int(np.sum(vad_labels > 0))
+            except Exception as e:
+                print(f"    ⚠️  VAD sum error: {e}")
+                print(f"    📊  vad_labels shape: {vad_labels.shape}, dtype: {vad_labels.dtype}")
+                print(f"    📊  vad_labels type: {type(vad_labels)}")
+                vad_frames = 0
+                
+            try:
+                osd_frames = int(np.sum(osd_labels > 0))
+            except Exception as e:
+                print(f"    ⚠️  OSD sum error: {e}")
+                print(f"    📊  osd_labels shape: {osd_labels.shape}, dtype: {osd_labels.dtype}")
+                print(f"    📊  osd_labels type: {type(osd_labels)}")
+                osd_frames = 0
+                
+            try:
+                vcn_frames = int(np.sum(vcn_labels > 0))
+            except Exception as e:
+                print(f"    ⚠️  VCN sum error: {e}")
+                print(f"    📊  vcn_labels shape: {vcn_labels.shape}, dtype: {vcn_labels.dtype}")
+                print(f"    📊  vcn_labels type: {type(vcn_labels)}")
+                vcn_frames = 0
             
             return {
                 'vad': vad_labels,           # [num_frames] - Voice Activity Detection
