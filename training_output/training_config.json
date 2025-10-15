@@ -1,0 +1,62 @@
+{
+  "num_epochs": 150,
+  "optimizer": {
+    "type": "adamw",
+    "learning_rate": 0.001,
+    "weight_decay": 0.01
+  },
+  "scheduler": {
+    "type": "onecycle",
+    "max_lr": 0.01,
+    "pct_start": 0.3
+  },
+  "loss": {
+    "vad_weight": 1.0,
+    "osd_weight": 2.0,
+    "vcn_weight": 3.0,
+    "use_focal_loss": true,
+    "focal_alpha": 0.25,
+    "focal_gamma": 2.0,
+    "class_weights": null
+  },
+  "gradient_clip": 1.0,
+  "save_every": 10,
+  "use_progressive_training": true,
+  "curriculum_schedule": [
+    [
+      0,
+      10.0,
+      1.0
+    ],
+    [
+      20,
+      30.0,
+      1.5
+    ],
+    [
+      50,
+      60.0,
+      2.0
+    ]
+  ],
+  "model": {
+    "input_dim": 80,
+    "hidden_channels": [
+      128,
+      128,
+      256,
+      256,
+      512
+    ],
+    "kernel_size": 3,
+    "num_speakers": 4,
+    "dropout": 0.2
+  },
+  "data": {
+    "segment_duration": 60.0,
+    "hop_duration": 30.0,
+    "sample_rate": 16000,
+    "n_mels": 80,
+    "batch_size": 8
+  }
+}

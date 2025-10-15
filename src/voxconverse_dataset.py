@@ -6,13 +6,17 @@ from torch.utils.data import Dataset, DataLoader
 from datasets import load_dataset
 from typing import Dict, List, Tuple, Optional
 import warnings
+import os
+import pickle
+import hashlib
+from pathlib import Path
 warnings.filterwarnings("ignore")
 
 
 class VoxConverseDataset(Dataset):
     """
-    Dataset adapter for VoxConverse speaker diarization.
-    Converts VoxConverse format to training-ready tensors.
+    Dataset adapter for VoxConverse speaker diarization with persistent caching.
+    Converts VoxConverse format to training-ready tensors and saves processed data to disk.
     """
     
     def __init__(self, 
@@ -22,7 +26,9 @@ class VoxConverseDataset(Dataset):
                  sample_rate=16000,
                  n_mels=80,
                  min_speaker_duration=0.5,
-                 pin_memory=True):
+                 pin_memory=True,
+                 cache_dir='./voxconverse_cache',
+                 force_reload=False):
         """
         Args:
             split: 'dev' or 'test'
@@ -32,6 +38,8 @@ class VoxConverseDataset(Dataset):
             n_mels: Number of mel features
             min_speaker_duration: Minimum duration for a speaker to be included
             pin_memory: Legacy parameter, now handled by DataLoader pin_memory setting
+            cache_dir: Directory to store processed dataset cache
+            force_reload: If True, ignore cache and reprocess everything
         """
         self.split = split
         self.segment_duration = segment_duration
@@ -40,17 +48,87 @@ class VoxConverseDataset(Dataset):
         self.n_mels = n_mels
         self.min_speaker_duration = min_speaker_duration
         self.pin_memory = pin_memory
+        self.cache_dir = Path(cache_dir)
+        self.force_reload = force_reload
         
+        # Create cache directory
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Generate cache key based on parameters
+        self.cache_key = self._generate_cache_key()
+        self.cache_file = self.cache_dir / f"voxconverse_{self.cache_key}.pkl"
+        
+        # Try to load from cache first
+        if not force_reload and self._load_from_cache():
+            print(f"✅ Loaded dataset from cache: {self.cache_file}")
+            print(f"📦 {len(self.segments)} segments ready")
+        else:
+            print(f"🔄 Processing VoxConverse dataset...")
+            self._process_dataset()
+            self._save_to_cache()
+            print(f"💾 Dataset cached to: {self.cache_file}")
+        
+        print(f"🎯 Dataset ready: {len(self.segments)} segments")
+    
+    def _generate_cache_key(self):
+        """Generate a unique cache key based on parameters."""
+        key_string = f"{self.split}_{self.segment_duration}_{self.hop_duration}_{self.sample_rate}_{self.n_mels}_{self.min_speaker_duration}"
+        return hashlib.md5(key_string.encode()).hexdigest()[:12]
+    
+    def _load_from_cache(self):
+        """Try to load dataset from cache."""
+        if self.cache_file.exists():
+            try:
+                with open(self.cache_file, 'rb') as f:
+                    cache_data = pickle.load(f)
+                
+                # Verify cache integrity
+                if cache_data.get('cache_key') == self.cache_key:
+                    self.segments = cache_data['segments']
+                    self.mel_transform = cache_data['mel_transform']
+                    return True
+                else:
+                    print("⚠️  Cache key mismatch, reprocessing...")
+                    return False
+            except Exception as e:
+                print(f"⚠️  Error loading cache: {e}, reprocessing...")
+                return False
+        return False
+    
+    def _save_to_cache(self):
+        """Save processed dataset to cache."""
+        try:
+            cache_data = {
+                'cache_key': self.cache_key,
+                'segments': self.segments,
+                'mel_transform': self.mel_transform,
+                'split': self.split,
+                'segment_duration': self.segment_duration,
+                'hop_duration': self.hop_duration,
+                'sample_rate': self.sample_rate,
+                'n_mels': self.n_mels,
+                'min_speaker_duration': self.min_speaker_duration
+            }
+            
+            with open(self.cache_file, 'wb') as f:
+                pickle.dump(cache_data, f)
+            
+            print(f"✅ Dataset cached successfully")
+        except Exception as e:
+            print(f"⚠️  Warning: Could not save cache: {e}")
+    
+    def _process_dataset(self):
+        """Process the raw VoxConverse dataset."""
         # Load VoxConverse dataset
-        print(f"Loading VoxConverse {split} split...")
-        self.dataset = load_dataset("diarizers-community/voxconverse")[split]
+        print(f"📥 Loading VoxConverse {self.split} split...")
+        self.dataset = load_dataset("diarizers-community/voxconverse")[self.split]
         
         # Mel spectrogram transform
         self.mel_transform = torchaudio.transforms.MelSpectrogram(
-            sample_rate=sample_rate,
+            sample_rate=self.sample_rate,
             n_fft=512,
             hop_length=256,  # 16ms hop
-            n_mels=n_mels,
+            n_mels=self.n_mels,
             f_min=20,
             f_max=8000
         )
@@ -60,8 +138,6 @@ class VoxConverseDataset(Dataset):
         
         print(f"✅ Prepared {len(self.segments)} segments from {len(self.dataset)} conversations")
     
-    def _extract_training_segments(self) -> List[Dict]:
-        """Extract training segments from conversations with sliding window."""
     def _extract_training_segments(self) -> List[Dict]:
         """Extract training segments from conversations with sliding window."""
         segments = []
@@ -377,6 +453,38 @@ class VoxConverseDataset(Dataset):
             'osd_frames': segment.get('osd_frames', 0),
             'vcn_frames': segment.get('vcn_frames', 0)
         }
+
+    def get_cache_info(self):
+        """Get information about dataset cache."""
+        cache_info = {
+            'cache_dir': str(self.cache_dir),
+            'cache_file': str(self.cache_file),
+            'cache_exists': self.cache_file.exists(),
+            'cache_key': self.cache_key,
+            'segments_count': len(self.segments) if hasattr(self, 'segments') else 0
+        }
+        
+        if self.cache_file.exists():
+            cache_info['cache_size_mb'] = self.cache_file.stat().st_size / (1024 * 1024)
+        
+        return cache_info
+    
+    def clear_cache(self):
+        """Clear the dataset cache."""
+        if self.cache_file.exists():
+            self.cache_file.unlink()
+            print(f"🗑️  Cache cleared: {self.cache_file}")
+        else:
+            print("ℹ️  No cache to clear")
+    
+    @classmethod
+    def list_cache_files(cls, cache_dir='./voxconverse_cache'):
+        """List all cache files in the cache directory."""
+        cache_path = Path(cache_dir)
+        if cache_path.exists():
+            cache_files = list(cache_path.glob("voxconverse_*.pkl"))
+            return [str(f) for f in cache_files]
+        return []
 
 
 def collate_fn(batch):
